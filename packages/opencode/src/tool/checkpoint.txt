@@ -1,0 +1,5 @@
+Compress accumulated conversation history into a summary. Provide only the summary text — the range is determined automatically.
+
+If there is nothing to compress, the tool returns without creating a fold — not an error.
+
+Summary: extract signal, discard noise. Signal is everything that pertains to the current task — decisions made, outcomes reached, file paths, variable names, values needed to continue. Noise is everything else.

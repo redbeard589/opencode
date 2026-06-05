@@ -23,6 +23,11 @@ import { Plugin } from "../plugin"
 import { Provider } from "@/provider/provider"
 
 import { WebSearchTool } from "./websearch"
+import { FoldTool } from "./fold"
+
+import { CheckpointTool } from "./checkpoint"
+import { SearchConversationTool } from "./search-conversation"
+import { ReadConversationTool } from "./read-conversation"
 import * as Log from "@opencode-ai/core/util/log"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
@@ -105,8 +110,8 @@ export const layer: Layer.Layer<
   | Format.Service
   | Truncate.Service
   | RuntimeFlags.Service
-  | Database.Service
-> = Layer.effect(
+| Database.Service
+ > = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -133,6 +138,10 @@ export const layer: Layer.Layer<
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
     const agent = yield* Agent.Service
+    const fold = yield* FoldTool
+    const checkpoint = yield* CheckpointTool
+    const searchconversation = yield* SearchConversationTool
+    const readconversation = yield* ReadConversationTool
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -239,6 +248,10 @@ export const layer: Layer.Layer<
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          fold: Tool.init(fold),
+          checkpoint: Tool.init(checkpoint),
+          searchconversation: Tool.init(searchconversation),
+          readconversation: Tool.init(readconversation),
         })
 
         return {
@@ -260,6 +273,10 @@ export const layer: Layer.Layer<
             tool.patch,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
+            tool.fold,
+            tool.checkpoint,
+            tool.searchconversation,
+            tool.readconversation,
           ],
           task: tool.task,
           read: tool.read,

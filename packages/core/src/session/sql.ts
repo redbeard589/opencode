@@ -134,6 +134,52 @@ export const SessionMessageTable = sqliteTable(
   ],
 )
 
+export const FoldTable = sqliteTable(
+  "fold",
+  {
+    id: text().primaryKey(),
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    start_msg_id: text().notNull(),
+    end_msg_id: text().notNull(),
+    start_index: integer(),
+    end_index: integer(),
+    summary: text().notNull(),
+    ...Timestamps,
+  },
+  (table) => [
+    index("fold_session_idx").on(table.session_id),
+    index("fold_start_end_idx").on(table.start_index, table.end_index),
+  ],
+)
+
+export const IDFTermsTable = sqliteTable(
+  "idf_terms",
+  {
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    word: text().notNull(),
+    doc_count: integer().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.session_id, table.word] })],
+)
+
+export const IDFMetadataTable = sqliteTable(
+  "idf_metadata",
+  {
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .primaryKey()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    total_docs: integer().notNull(),
+    last_msg_id: text().notNull(),
+  },
+)
+
 export const SessionInputTable = sqliteTable(
   "session_input",
   {

@@ -34,6 +34,14 @@ import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
 import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
 import { isRecord } from "@/util/record"
+import path from "path"
+import fs from "fs"
+
+const portableData = path.join(path.dirname(process.execPath), "opencode-portable-data")
+if (fs.existsSync(portableData)) {
+  process.env.OPENCODE_HOME = portableData
+  process.env.OPENCODE_PORTABLE = "1"
+}
 
 const processMetadata = ensureProcessMetadata("main")
 

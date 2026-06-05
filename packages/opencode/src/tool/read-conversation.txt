@@ -1,0 +1,5 @@
+Read messages directly from the full conversation database. The start_index refers to the master (unfolded) message order. Folds are ignored — you read the original messages even if they are currently folded in the main conversation view.
+
+Parameters:
+- start_index: Master (unfolded) message index to start reading from (0‑based, inclusive)
+- limit: Maximum number of messages to return (default 10, max 100)

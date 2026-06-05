@@ -7,10 +7,19 @@ import { Flock } from "./util/flock"
 import { Flag } from "./flag/flag"
 
 const app = "opencode"
-const data = path.join(xdgData!, app)
-const cache = path.join(xdgCache!, app)
-const config = path.join(xdgConfig!, app)
-const state = path.join(xdgState!, app)
+
+function resolve(homedir: string, ...segments: string[]): string {
+  return path.join(homedir, ...segments)
+}
+
+const base = process.env.OPENCODE_HOME ?? process.env.OPENCODE_TEST_HOME ?? os.homedir()
+
+const data = resolve(base, app === "opencode" ? ".local" : "", ".opencode", "data")
+const cache = process.env.OPENCODE_HOME
+  ? path.join(process.env.OPENCODE_HOME, ".opencode", "cache")
+  : path.join(xdgCache!, app)
+const config = resolve(base, app === "opencode" ? ".config" : "", ".opencode", "config")
+const state = resolve(base, app === "opencode" ? ".local" : "", ".opencode", "state")
 const tmp = path.join(os.tmpdir(), app)
 
 const paths = {
