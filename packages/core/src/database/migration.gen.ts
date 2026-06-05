@@ -33,6 +33,6 @@ export const migrations = (
     import("./migration/20260603160727_jittery_ezekiel_stane"),
     import("./migration/20260604172448_event_sourced_session_input"),
     import("./migration/20260605000000_add_folds"),
-    import("./migration/20260605000001_add_fold_indexes"),
+    import("./migration/20260605000002_add_fold_indexes"),
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]

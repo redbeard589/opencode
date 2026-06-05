@@ -11,6 +11,8 @@ export default {
           \`session_id\` text NOT NULL,
           \`start_msg_id\` text NOT NULL,
           \`end_msg_id\` text NOT NULL,
+          \`start_index\` integer,
+          \`end_index\` integer,
           \`summary\` text NOT NULL,
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL
