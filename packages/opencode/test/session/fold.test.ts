@@ -99,10 +99,10 @@ describe("substituteFolds", () => {
     expect(out[9]).toBe(msgs[11])
   })
 
-  test("keeps tail ghosts when a fold range extends into the tail window", () => {
-    // 12 messages; tailFloor = 12-1-5+1 = 7. Fold at 4..9 collapses [4..6],
-    // ghosts [7..9] (3 messages). Result: msgs[0..3] + synth + msgs[7..9] + msgs[10..11]
-    // = 4 + 1 + 3 + 2 = 10 entries (replacing 12 originals, -2).
+  test("keeps the live-tail portion live when a fold extends into it", () => {
+    // 12 messages; tailLiveCutoff = 11-5 = 6. Fold at 4..9: collapse [4..6]
+    // (3 messages), keep [7..9] live (3 messages). Result:
+    // msgs[0..3] + synth + msgs[7..9] + msgs[10..11] = 4 + 1 + 3 + 2 = 10.
     const msgs = Array.from({ length: 12 }, (_, i) => makeMsg(i, i % 2 === 0 ? "user" : "assistant"))
     const fold = makeFold(4, 9, "Partial tail fold")
     const out = substituteFolds(msgs, [fold], 1_700_000_000_999)
@@ -115,9 +115,11 @@ describe("substituteFolds", () => {
     expect(synth.info.role).toBe("user")
     expect(synth.info.id).toBe(MessageID.make("msg-fold-fold-test-001"))
     if (synth.parts[0].type === "text") {
-      expect(synth.parts[0].text).toContain("preserved as ghosts")
-      expect(synth.parts[0].text).toContain('count="6"')
+      // count reflects only the collapsed portion, not the live-tail ghosts.
+      expect(synth.parts[0].text).toContain('count="3"')
+      expect(synth.parts[0].text).not.toContain("preserved as ghosts")
     }
+    // Live-tail portion of the fold stays as live originals.
     expect(out[5]).toBe(msgs[7])
     expect(out[6]).toBe(msgs[8])
     expect(out[7]).toBe(msgs[9])
@@ -125,14 +127,16 @@ describe("substituteFolds", () => {
     expect(out[9]).toBe(msgs[11])
   })
 
-  test("skips substitution when a fold is entirely within the tail window", () => {
-    // 10 messages; tailFloor = 9-5+1 = 5. Fold at 5..9 is fully in the tail —
-    // model still sees it as live context, so the fold adds no value at the
-    // prompt level. Output equals input.
+  test("skips substitution when a fold is entirely within the live-tail window", () => {
+    // 10 messages; tailLiveCutoff = 9-5 = 4. Fold at 5..9 starts after
+    // tailLiveCutoff — model already has the originals as live context,
+    // so the fold adds no value at the prompt level.
     const msgs = Array.from({ length: 10 }, (_, i) => makeMsg(i, i % 2 === 0 ? "user" : "assistant"))
     const fold = makeFold(5, 9, "Tail fold")
     const out = substituteFolds(msgs, [fold], 1_700_000_000_999)
-    expect(out).toBe(msgs)
+    // Output is structurally identical to the input (same length, same
+    // message references in the same order).
+    expect(out).toEqual(msgs)
   })
 
   test("handles multiple non-overlapping folds in ascending order", () => {

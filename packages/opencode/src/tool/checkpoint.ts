@@ -7,6 +7,8 @@ import { FoldTable } from "@opencode-ai/core/session/sql"
 import { desc, eq } from "drizzle-orm"
 import DESCRIPTION from "./checkpoint.txt"
 
+const TAIL_LIVE = Fold.FOLD_TAIL_LIVE
+
 type CheckpointMeta = {
   foldID: string
   startIndex: number
@@ -44,7 +46,11 @@ export const CheckpointTool = Tool.define(
             .pipe(Effect.orElseSucceed(() => undefined))
 
           const start = lastFold ? (lastFold.end_index ?? 0) + 1 : 0
-          const end = maxIndex
+          // Leave the last TAIL_LIVE messages live so the model always
+          // has recent context. Without this floor the fold would cover
+          // the tail and substituteFolds would re-emit those messages
+          // as ghosts, producing ~0 token reduction.
+          const end = maxIndex - TAIL_LIVE
 
           const EMPTY: CheckpointMeta = { foldID: "", startIndex: 0, endIndex: 0, messageCount: 0 }
 

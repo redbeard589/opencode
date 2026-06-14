@@ -155,18 +155,22 @@ export function buildVisibleMap(sessionID: SessionSchema.ID, msgs: WithParts[]):
   })
 }
 
-// Keep this many recent messages as "ghosts" (live originals) when a fold's
-// range extends into the tail. Folding the very tail blinds the model to
-// the latest context; 5 matches the checkpoint tool's own minimum.
-const FOLD_TAIL_GHOSTS = 5
+// The model always needs a small recent tail of live context. Folds are
+// not allowed to cover the last FOLD_TAIL_LIVE messages, so the
+// substitution never has to decide which originals to keep inside a
+// fold's range — they're already outside the fold.
+export const FOLD_TAIL_LIVE = 5
 
-// Pure substitution. Replaces each fold's range with a single synthetic
-// User message carrying the fold summary, preserving the last
-// FOLD_TAIL_GHOSTS messages of any fold that reaches into the tail as
-// ghosts. Folds that are entirely within the tail window are left as
-// ghosts with no synth (a fold whose range the model still sees live
-// gains nothing by summarizing). Returned array stays in the same shape
-// as `msgs` so downstream `tagMessage` indices remain meaningful.
+// Pure substitution. Walks the message array and replaces each fold's
+// range with a single synthetic User message carrying the fold's
+// summary text. The last FOLD_TAIL_LIVE messages are always kept live
+// (by definition they're outside every fold). Folds whose range falls
+// entirely inside the tail live window are dropped — there's nothing
+// to collapse because the model already has the originals.
+//
+// The returned array stays in the same shape and order as `msgs`
+// (minus collapsed ranges) so downstream `tagMessage` indices remain
+// meaningful.
 export function substituteFolds(msgs: WithParts[], folds: FoldInfo[], now: number = Date.now()): WithParts[] {
   if (folds.length === 0) return msgs
 
@@ -187,15 +191,12 @@ export function substituteFolds(msgs: WithParts[], folds: FoldInfo[], now: numbe
 
   if (ranges.length === 0) return msgs
 
+  // Fold's range that lies entirely inside the tail-live window is a
+  // no-op — the model still has the originals. Clip the end to
+  // `lastOriginalIndex - FOLD_TAIL_LIVE` so we collapse the part that's
+  // actually outside the live window.
   const lastOriginalIndex = msgs.length - 1
-  // First index of the "tail window" — the last FOLD_TAIL_GHOSTS messages.
-  // A fold entirely at or after this index sees no benefit from substitution
-  // because the model still has all of it as live context.
-  const tailFloor = lastOriginalIndex - FOLD_TAIL_GHOSTS + 1
-
-  // No-op fast path: every fold's range starts inside the tail window, so
-  // none of them will produce a substitution. Return the input unchanged.
-  if (ranges.every((r) => r.start >= tailFloor)) return msgs
+  const tailLiveCutoff = lastOriginalIndex - FOLD_TAIL_LIVE
 
   const out: WithParts[] = []
   let i = 0
@@ -206,34 +207,31 @@ export function substituteFolds(msgs: WithParts[], folds: FoldInfo[], now: numbe
       i++
       continue
     }
-    // Fold entirely in the tail window: skip substitution, keep originals.
-    if (r.start >= tailFloor) {
+    if (r.start > tailLiveCutoff) {
+      // Fold entirely in the live tail: keep originals.
       for (let g = r.start; g <= r.end; g++) {
         out.push(msgs[g])
       }
       i = r.end + 1
       continue
     }
-    // Fold reaches into the tail: collapse [start..tailFloor-1], ghost
-    // [tailFloor..end]. Fold ends before the tail: collapse [start..end].
-    const collapsedEnd = r.end >= tailFloor ? tailFloor - 1 : r.end
+    const collapsedEnd = Math.min(r.end, tailLiveCutoff)
+    if (collapsedEnd < r.start) {
+      // Defensive: shouldn't happen because of the early continue above.
+      for (let g = r.start; g <= r.end; g++) out.push(msgs[g])
+      i = r.end + 1
+      continue
+    }
     const collapsedCount = collapsedEnd - r.start + 1
-    const ghostedCount = r.end - collapsedEnd
     const anchor = msgs[r.start]
-    // Synth id must pass MessageID's isStartsWith("msg") brand.
     const synthMsgID = `msg-fold-${r.fold.id}` as User["id"]
     const synthPartID = `prt-fold-${r.fold.id}` as TextPart["id"]
     const summaryBlock = [
       `<!-- fold:${r.start}-${r.end} -->`,
-      `<fold_summary session="${anchor.info.sessionID}" range="${r.start}-${r.end}" count="${collapsedCount + ghostedCount}">`,
+      `<fold_summary session="${anchor.info.sessionID}" range="${r.start}-${r.end}" count="${collapsedCount}">`,
       r.fold.summary,
       "</fold_summary>",
-      ghostedCount > 0
-        ? `<note>The ${ghostedCount} most recent message(s) in the folded range are preserved as ghosts below for context.</note>`
-        : "",
-    ]
-      .filter(Boolean)
-      .join("\n")
+    ].join("\n")
     // Build the synth User info explicitly. The anchor may be an Assistant,
     // so spreading it would drop the required `model` field on User.
     const synthInfo: User = {
@@ -255,6 +253,8 @@ export function substituteFolds(msgs: WithParts[], folds: FoldInfo[], now: numbe
       synthetic: true,
     }
     out.push({ info: synthInfo, parts: [synthPart] })
+    // Push the live-tail portion of the fold (the part the model still
+    // needs) as live originals.
     for (let g = collapsedEnd + 1; g <= r.end; g++) {
       out.push(msgs[g])
     }

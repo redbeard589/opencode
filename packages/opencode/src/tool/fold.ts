@@ -82,6 +82,16 @@ export const FoldTool = Tool.define(
             }
           }
 
+          // Refuse to fold the last FOLD_TAIL_LIVE messages — those stay
+          // live so the model has recent context.
+          if (params.end_index > maxIndex - Fold.FOLD_TAIL_LIVE) {
+            return {
+              title: "Error",
+              output: `Cannot fold the last ${Fold.FOLD_TAIL_LIVE} messages of the session; they must remain live for context. Choose an end_index ≤ ${maxIndex - Fold.FOLD_TAIL_LIVE}.`,
+              metadata: EMPTY,
+            }
+          }
+
           if (!visibleMap.has(params.start_index) || !visibleMap.has(params.end_index)) {
             return {
               title: "Error",
