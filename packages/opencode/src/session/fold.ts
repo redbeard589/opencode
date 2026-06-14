@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { FoldTable } from "@opencode-ai/core/session/sql"
 import { ascending } from "@opencode-ai/core/id/id"
-import type { WithParts } from "@opencode-ai/core/v1/session"
+import type { TextPart, User, WithParts } from "@opencode-ai/core/v1/session"
 import type { SessionSchema } from "@opencode-ai/core/session/schema"
 
 export type VisibleMapEntry =
@@ -153,6 +153,114 @@ export function buildVisibleMap(sessionID: SessionSchema.ID, msgs: WithParts[]):
 
     return visibleMap
   })
+}
+
+// Keep this many recent messages as "ghosts" (live originals) when a fold's
+// range extends into the tail. Folding the very tail blinds the model to
+// the latest context; 5 matches the checkpoint tool's own minimum.
+const FOLD_TAIL_GHOSTS = 5
+
+// Pure substitution. Replaces each fold's range with a single synthetic
+// User message carrying the fold summary, preserving the last
+// FOLD_TAIL_GHOSTS messages of any fold that reaches into the tail as
+// ghosts. Folds that are entirely within the tail window are left as
+// ghosts with no synth (a fold whose range the model still sees live
+// gains nothing by summarizing). Returned array stays in the same shape
+// as `msgs` so downstream `tagMessage` indices remain meaningful.
+export function substituteFolds(msgs: WithParts[], folds: FoldInfo[], now: number = Date.now()): WithParts[] {
+  if (folds.length === 0) return msgs
+
+  const idToIndex = new Map<string, number>()
+  for (let i = 0; i < msgs.length; i++) {
+    idToIndex.set(msgs[i].info.id, i)
+  }
+
+  const ranges = folds
+    .map((f) => {
+      const start = idToIndex.get(f.startMsgID)
+      const end = idToIndex.get(f.endMsgID)
+      if (start === undefined || end === undefined || start > end) return undefined
+      return { fold: f, start, end }
+    })
+    .filter((r): r is { fold: FoldInfo; start: number; end: number } => r !== undefined)
+    .sort((a, b) => a.start - b.start)
+
+  if (ranges.length === 0) return msgs
+
+  const lastOriginalIndex = msgs.length - 1
+  // First index of the "tail window" — the last FOLD_TAIL_GHOSTS messages.
+  // A fold entirely at or after this index sees no benefit from substitution
+  // because the model still has all of it as live context.
+  const tailFloor = lastOriginalIndex - FOLD_TAIL_GHOSTS + 1
+
+  // No-op fast path: every fold's range starts inside the tail window, so
+  // none of them will produce a substitution. Return the input unchanged.
+  if (ranges.every((r) => r.start >= tailFloor)) return msgs
+
+  const out: WithParts[] = []
+  let i = 0
+  while (i < msgs.length) {
+    const r = ranges.find((r) => r.start === i)
+    if (!r) {
+      out.push(msgs[i])
+      i++
+      continue
+    }
+    // Fold entirely in the tail window: skip substitution, keep originals.
+    if (r.start >= tailFloor) {
+      for (let g = r.start; g <= r.end; g++) {
+        out.push(msgs[g])
+      }
+      i = r.end + 1
+      continue
+    }
+    // Fold reaches into the tail: collapse [start..tailFloor-1], ghost
+    // [tailFloor..end]. Fold ends before the tail: collapse [start..end].
+    const collapsedEnd = r.end >= tailFloor ? tailFloor - 1 : r.end
+    const collapsedCount = collapsedEnd - r.start + 1
+    const ghostedCount = r.end - collapsedEnd
+    const anchor = msgs[r.start]
+    // Synth id must pass MessageID's isStartsWith("msg") brand.
+    const synthMsgID = `msg-fold-${r.fold.id}` as User["id"]
+    const synthPartID = `prt-fold-${r.fold.id}` as TextPart["id"]
+    const summaryBlock = [
+      `<!-- fold:${r.start}-${r.end} -->`,
+      `<fold_summary session="${anchor.info.sessionID}" range="${r.start}-${r.end}" count="${collapsedCount + ghostedCount}">`,
+      r.fold.summary,
+      "</fold_summary>",
+      ghostedCount > 0
+        ? `<note>The ${ghostedCount} most recent message(s) in the folded range are preserved as ghosts below for context.</note>`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n")
+    // Build the synth User info explicitly. The anchor may be an Assistant,
+    // so spreading it would drop the required `model` field on User.
+    const synthInfo: User = {
+      id: synthMsgID,
+      sessionID: anchor.info.sessionID,
+      role: "user",
+      time: { created: now },
+      agent: anchor.info.agent,
+      model: "modelID" in anchor.info
+        ? { providerID: anchor.info.providerID, modelID: anchor.info.modelID }
+        : anchor.info.model,
+    }
+    const synthPart: TextPart = {
+      type: "text",
+      id: synthPartID,
+      sessionID: anchor.info.sessionID,
+      messageID: synthMsgID,
+      text: summaryBlock,
+      synthetic: true,
+    }
+    out.push({ info: synthInfo, parts: [synthPart] })
+    for (let g = collapsedEnd + 1; g <= r.end; g++) {
+      out.push(msgs[g])
+    }
+    i = r.end + 1
+  }
+  return out
 }
 
 export * as Fold from "./fold"

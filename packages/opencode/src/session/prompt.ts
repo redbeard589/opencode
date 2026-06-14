@@ -7,6 +7,7 @@ import { MessageV2 } from "./message-v2"
 import { Log } from "@opencode-ai/core/util/log"
 import { SessionRevert } from "./revert"
 import { Session } from "./session"
+import { Fold } from "./fold"
 import { Agent } from "../agent/agent"
 import { Provider } from "@/provider/provider"
 
@@ -1462,6 +1463,8 @@ export const layer = Layer.effect(
 
             const hasContextTools = Object.keys(tools).some((id) => contextToolIDs.includes(id))
             if (hasContextTools) {
+              const folds = yield* Fold.list(sessionID).pipe(Effect.provideService(Database.Service, database))
+              msgs = Fold.substituteFolds(msgs, folds)
               msgs = stripFoldToolCalls(msgs).map((m, i) => tagMessage(m, i))
             }
 
