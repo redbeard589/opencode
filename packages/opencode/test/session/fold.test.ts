@@ -89,7 +89,6 @@ describe("substituteFolds", () => {
     expect(part.type).toBe("text")
     if (part.type === "text") {
       expect(part.synthetic).toBe(true)
-      expect(part.text).toContain("<!-- fold:1-3 -->")
       expect(part.text).toContain('count="3"')
       expect(part.text).toContain("Worked on refactor")
       expect(part.text).not.toContain("preserved as ghosts")

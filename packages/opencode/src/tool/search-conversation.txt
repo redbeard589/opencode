@@ -1,8 +1,0 @@
-Search across all messages in the conversation (including folded content) using TF-IDF weighted Jaccard similarity with a sliding window. Returns matches with message index, fold status, relevance score, and context snippets.
-
-Parameters:
-- pattern: Query string to search for
-- offset: Number of results to skip (default 0)
-- position_bias: Bias results toward messages near a position (0=first, 100=last). Higher values favor recent messages.
-
-Returns up to 3 results at a time with scores, sorted by relevance. Use offset to paginate through additional results.

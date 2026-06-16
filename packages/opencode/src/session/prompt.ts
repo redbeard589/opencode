@@ -84,24 +84,13 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 const log = Log.create({ service: "session.prompt" })
 const elog = EffectLogger.create({ service: "session.prompt" })
 
-const contextToolIDs = ["fold", "checkpoint", "search-conversation", "read-conversation"]
+const contextToolIDs = ["checkpoint"]
 
-function stripFoldToolCalls(msgs: WithParts[]): WithParts[] {
+function stripContextToolCalls(msgs: WithParts[]): WithParts[] {
   return msgs.map((msg) => ({
     ...msg,
     parts: msg.parts.filter((p: any) => !(p.type === "tool" && contextToolIDs.includes(p.tool))),
   }))
-}
-
-function tagMessage(msg: WithParts, index: number): WithParts {
-  const prefix = `<!-- msg:${index} -->`
-  const tagged = { ...msg, parts: [...msg.parts] }
-  if (tagged.parts.length > 0 && tagged.parts[0].type === "text") {
-    tagged.parts[0] = { ...tagged.parts[0], text: prefix + "\n" + tagged.parts[0].text }
-  } else {
-    tagged.parts.unshift({ type: "text", text: prefix } as any)
-  }
-  return tagged
 }
 
 function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
@@ -1465,7 +1454,7 @@ export const layer = Layer.effect(
             if (hasContextTools) {
               const folds = yield* Fold.list(sessionID).pipe(Effect.provideService(Database.Service, database))
               msgs = Fold.substituteFolds(msgs, folds)
-              msgs = stripFoldToolCalls(msgs).map((m, i) => tagMessage(m, i))
+              msgs = stripContextToolCalls(msgs)
             }
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })

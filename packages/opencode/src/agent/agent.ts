@@ -113,7 +113,6 @@ export const layer = Layer.effect(
           question: "deny",
           plan_enter: "deny",
           plan_exit: "deny",
-          fold: "deny",
           checkpoint: "allow",
           // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
           read: {
@@ -193,7 +192,6 @@ export const layer = Layer.effect(
                 websearch: "allow",
                 read: "allow",
                 external_directory: readonlyExternalDirectory,
-                fold: "allow",
               }),
               user,
             ),
@@ -213,7 +211,7 @@ export const layer = Layer.effect(
               defaults,
               Permission.fromConfig({
                 "*": "deny",
-                fold: "allow",
+                checkpoint: "allow",
               }),
               user,
             ),

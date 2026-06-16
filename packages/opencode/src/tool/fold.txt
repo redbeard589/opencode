@@ -1,5 +1,0 @@
-Fold a range of conversation messages into a concise summary to reduce context window size. Use the <!-- msg:N --> tags visible in user messages to specify the range. The folded messages are preserved in the database and can be accessed via search‑conversation and read‑conversation tools.
-
-IMPORTANT: You can also reference existing folds using their <!-- msg:N --> tag. When you specify a start or end index that points to a fold, the fold will be expanded to include the original message range.
-
-IMPORTANT: The last 5 messages cannot be folded. Always choose an end_index that leaves the most recent 5 messages untouched.
